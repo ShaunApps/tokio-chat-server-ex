@@ -66,6 +66,11 @@ impl Lines {
     }
 
     fn buffer(&mut self, line: &[u8]) {
+
+        // Ensure the buffer has capacity. Ideally this would not be unbounded,
+        // but to keep the example simple, we will not limit this.
+        self.wr.reserve(line.len());
+
         // Push the line onto the end of the write buffer. 
         // 
         // The `put` function is from the `BufMut` trait. 
@@ -181,8 +186,10 @@ impl Future for Peer {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<(), io::Error> {
+        
+        const LINES_PER_TICK: usize = 10;
         // Receive all messages from peers.
-        loop {
+        for i in 0..LINES_PER_TICK {
             // Polling an `UnboundedReceiver` cannot fail, so `unwrap`
             // here is safe.
             match self.rx.poll().unwrap() {
@@ -191,10 +198,16 @@ impl Future for Peer {
                     // they will be flushed to the socket (right
                     // below).
                     self.lines.buffer(&v);
+                    if i+1 == LINES_PER_TICK {
+                        task::current().notify();
+                    }
                 }
                 _ => break,
             }
         }
+
+            
+        
 
         // Flush the write buffer to the socket
         let _ = self.lines.poll_flush()?;
